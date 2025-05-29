@@ -6,7 +6,6 @@
 #include <PubSubClient.h>
 #include "driver/rtc_io.h"
 
-
 #define LED_GPIO 2
 
 WebServer server(80);
@@ -122,7 +121,7 @@ void setupWebServer() {
   server.begin();
   Serial.println("WebServer iniciado em /");
 }
-/*
+
 void mqttCallback(char* topic, byte* payload, unsigned int len) {
   String msg;
   for (unsigned int i = 0; i < len; i++) msg += (char)payload[i];
@@ -131,52 +130,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int len) {
     digitalWrite(LED_GPIO, HIGH);
     Serial.println("LED ON");
   } else if (msg == "0") {
-    digitalWrite(LED_GPIO, LOW);
-    Serial.println("LED OFF");
-  }
-}
-*/
-
-bool status;      // variável que você já usa para decidir entrar em Deep Sleep
-int intervalo;    // intervalo em segundos para o Wake-up por timer
-// -----------------------------------------------------------------------------
-
-void mqttCallback(char* topic, byte* payload, unsigned int len) {
-  // 1) Converte o payload em String
-  String msg;
-  for (unsigned int i = 0; i < len; i++) {
-    msg += (char)payload[i];
-  }
-  Serial.printf("MQTT receb.: %s\n", msg.c_str());
-
-  // 2) Esperamos a mensagem no formato "X,Y", 
-  //    onde X será 0 ou 1 (status) e Y é o intervalo em segundos.
-  int sep = msg.indexOf(',');  
-  if (sep < 0) {
-    Serial.println("Formato inválido. Use: \"<status>,<intervalo>\".");
-    //return;
-    intervalo = 0;
-    status = (msg.toInt() == 1);
-  }else{
-    // 3) Extrai cada parte em String e converte para inteiro
-    String parteStatus    = msg.substring(0, sep);
-    String parteIntervalo = msg.substring(sep + 1);
-
-    int novoStatus    = parteStatus.toInt();    // converte "0"/"1" para int
-    int novoIntervalo = parteIntervalo.toInt(); // converte "60" para int
-
-    // 4) Atualiza as variáveis globais
-    status    = (novoStatus == 1);
-    intervalo = novoIntervalo;
-
-    Serial.printf("Ajustado: status = %d, intervalo = %d s\n", status, intervalo);
-  }
-  rtc_gpio_hold_dis(GPIO_NUM_2);
-  // 5) Acende/apaga LED conforme o comando (opcional)
-  if (status) {
-    digitalWrite(LED_GPIO, HIGH);
-    Serial.println("LED ON");
-  } else {
     digitalWrite(LED_GPIO, LOW);
     Serial.println("LED OFF");
   }
@@ -225,42 +178,6 @@ void setup() {
 
 unsigned long lastMqttAttempt = 0;
 
-void enterDeepSleep() {
-  Serial.println("=========== Entrando em Deep Sleep ===========");
-  rtc_gpio_hold_en(GPIO_NUM_2);
-  // 1) Wake-up por timer: intervalo (em microssegundos)
-  uint64_t uS = (uint64_t)intervalo * 1000000ULL;
-  esp_sleep_enable_timer_wakeup(uS);
-  Serial.printf("Wake-up configurado para daqui a %d segundos (%llu us)\n", intervalo, uS);
-
-  // 2) Wake-up por botão (GPIO0 nível LOW)
-  esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0);
-
-  delay(100);  // garante que as últimas mensagens do Serial sejam impressas
-  esp_deep_sleep_start();
-  // Depois daqui o ESP “desliga tudo” e só volta quando o timer expira ou o botão for pressionado.
-}
-
-void printWakeupReason() {
-  //rtc_gpio_hold_dis(GPIO_NUM_2);
-  esp_sleep_wakeup_cause_t causa = esp_sleep_get_wakeup_cause();
-  switch (causa) {
-    case ESP_SLEEP_WAKEUP_TIMER:
-      Serial.println("[Wake-up] Timer expirou.");
-      break;
-    case ESP_SLEEP_WAKEUP_EXT0:
-      Serial.println("[Wake-up] Botão (GPIO0) pressionado.");
-      break;
-    case ESP_SLEEP_WAKEUP_UNDEFINED:
-      Serial.println("[Wake-up] Boot normal (não era Deep Sleep).");
-      rtc_gpio_hold_dis(GPIO_NUM_2);
-      break;
-    default:
-      Serial.printf("[Wake-up] Outra causa: %d\n", (int)causa);
-      break;
-  }
-}
-
 void loop() {
   server.handleClient();
 
@@ -270,9 +187,5 @@ void loop() {
       connectMQTT();
     }
     client.loop();
-  }
-
-  if (intervalo > 0) {
-    enterDeepSleep();
   }
 }
